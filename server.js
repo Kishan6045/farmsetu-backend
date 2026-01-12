@@ -3,8 +3,6 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/database');
 
-const swaggerUi = require("swagger-ui-express");
-const swaggerSpec = require("./swagger/swagger");
 
 // Load environment variables
 dotenv.config();
@@ -20,8 +18,6 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ✅ Swagger route (IMPORTANT)
-app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
