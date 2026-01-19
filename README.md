@@ -48,14 +48,20 @@ FarmSetu/
    ```
 
 3. **Create environment file**
-   - Copy `.env.example` to `.env`
-   - Update the environment variables in `.env`:
+   - Create a `.env` file in the root directory
+   - Add the following environment variables:
      ```env
      PORT=5000
-     MONGODB_URI=mongodb://localhost:27017/farmsetu
+     MONGODB_URI=mongodb+srv://username:password@cluster0.rorsju8.mongodb.net/?retryWrites=true&w=majority
      JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
      JWT_EXPIRE=30d
      ```
+   
+   **⚠️ IMPORTANT - Database Connection:**
+   - Make sure your `MONGODB_URI` points to YOUR MongoDB cluster
+   - The database name is automatically set to `farmsetu` in the code
+   - When the server starts, it will log which cluster and database it's connected to
+   - If you see a warning about wrong database, check your `MONGODB_URI` immediately
 
 4. **Start MongoDB** (if using local MongoDB)
    - Make sure MongoDB is running on your system
@@ -76,7 +82,13 @@ The server will start on port 5000 (or the port specified in your `.env` file).
 
 You should see:
 ```
-MongoDB Connected: localhost:27017
+🔌 Connecting to MongoDB...
+📍 Cluster: cluster0.rorsju8.mongodb.net
+📦 Target Database: farmsetu
+✅ MongoDB Connected Successfully!
+📊 Connected Database: farmsetu
+🌐 Connected Host: cluster0-shard-00-00.xxxxx.mongodb.net
+✅ Database name verified: farmsetu
 Server is running on port 5000
 ```
 
@@ -247,7 +259,11 @@ Common HTTP status codes:
 ## Troubleshooting
 
 - **MongoDB Connection Error:** Ensure MongoDB is running and the `MONGODB_URI` in `.env` is correct
-- **Port Already in Use:** Change the `PORT` in `.env` file
+- **Data going to wrong database:** 
+  - Check the console logs when server starts - it shows which cluster and database you're connected to
+  - Verify your `MONGODB_URI` points to YOUR cluster (not someone else's)
+  - The database name is hardcoded to `farmsetu` - if you see a different database name in logs, your URI is wrong
+- **Port Already in Use:** Change the `PORT` in `.env` file (Note: Port change does NOT affect database connection)
 - **JWT Secret Error:** Make sure `JWT_SECRET` is set in `.env` file
 - **Duplicate Email/Phone:** Each user must have a unique email and phone number
 
