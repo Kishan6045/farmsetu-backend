@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const connectDB = require('./config/database');
-
+const logger = require('./middleware/logger');
 
 // Load environment variables
 dotenv.config();
@@ -17,6 +17,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Request logging middleware (should be after body parsers)
+app.use(logger);
 
 
 // Routes
