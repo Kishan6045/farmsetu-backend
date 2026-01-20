@@ -1,13 +1,5 @@
-const fs = require('fs');
 const path = require('path');
 const Listing = require('../models/Listing');
-
-// Utility to ensure upload directories exist
-const ensureDirExists = (dirPath) => {
-  if (!fs.existsSync(dirPath)) {
-    fs.mkdirSync(dirPath, { recursive: true });
-  }
-};
 
 // Create a new listing
 const createListing = async (req, res) => {
@@ -21,6 +13,8 @@ const createListing = async (req, res) => {
       district,
       state,
       showOnlyInMyDistrict,
+      images = [],   // Array of filenames: ["img1.jpg", "img2.jpg"]
+      video = null,  // Single filename: "vid1.mp4"
     } = req.body;
 
     // Basic validation for required fields
@@ -75,31 +69,16 @@ const createListing = async (req, res) => {
       title: trimmedTitle,
     });
 
-    // Build media URLs from uploaded files
-    const images = [];
-    let video = null;
-
-    if (req.files && Array.isArray(req.files.images)) {
-      req.files.images.forEach((file) => {
-        images.push(`/uploads/images/${file.filename}`);
-      });
-    }
-
-    if (req.files && Array.isArray(req.files.video) && req.files.video[0]) {
-      video = `/uploads/videos/${req.files.video[0].filename}`;
-    }
-
-    // Ensure upload directories exist (in case they were missing)
-    ensureDirExists(path.join(__dirname, '..', 'uploads', 'images'));
-    ensureDirExists(path.join(__dirname, '..', 'uploads', 'videos'));
+    // Ensure images is an array
+    const imagesArray = Array.isArray(images) ? images : [];
 
     const listing = await Listing.create({
       user: req.user._id,
       title,
       description,
       expectedPrice: numericPrice,
-      images,
-      video,
+      images: imagesArray,
+      video: video || null,
       address: {
         village,
         taluko,
@@ -109,10 +88,27 @@ const createListing = async (req, res) => {
       showOnlyInMyDistrict: showOnlyInMyDistrict === 'true' || showOnlyInMyDistrict === true,
     });
 
+    // Transform listing to return only filenames in images array and video
+    const listingObj = listing.toObject();
+
+    // Ensure images array contains only filenames (extract filename from path if needed)
+    if (listingObj.images && Array.isArray(listingObj.images)) {
+      listingObj.images = listingObj.images.map((img) => {
+        if (!img) return img;
+        // Extract just the filename (remove any path)
+        return path.basename(img);
+      });
+    }
+
+    // Ensure video contains only filename (extract filename from path if needed)
+    if (listingObj.video) {
+      listingObj.video = path.basename(listingObj.video);
+    }
+
     return res.status(201).json({
       success: true,
       message: 'Listing created successfully',
-      data: listing,
+      data: listingObj,
     });
   } catch (error) {
     console.error('Error creating listing:', error);
@@ -151,9 +147,30 @@ const getListings = async (req, res) => {
       ],
     }).populate('user', 'firstName lastName address district');
 
+    // Transform listings to return only filenames in images array and video
+    const transformedListings = listings.map((listing) => {
+      const listingObj = listing.toObject();
+
+      // Ensure images array contains only filenames (extract filename from path if needed)
+      if (listingObj.images && Array.isArray(listingObj.images)) {
+        listingObj.images = listingObj.images.map((img) => {
+          if (!img) return img;
+          // Extract just the filename (remove any path)
+          return path.basename(img);
+        });
+      }
+
+      // Ensure video contains only filename (extract filename from path if needed)
+      if (listingObj.video) {
+        listingObj.video = path.basename(listingObj.video);
+      }
+
+      return listingObj;
+    });
+
     return res.status(200).json({
       success: true,
-      data: listings,
+      data: transformedListings,
     });
   } catch (error) {
     console.error('Error fetching listings:', error);

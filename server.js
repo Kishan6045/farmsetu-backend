@@ -16,6 +16,8 @@ const app = express();
 
 // Middleware
 app.use(cors());
+// Note: express.json() and express.urlencoded() skip multipart/form-data automatically
+// Multer will handle multipart/form-data and populate req.body
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -29,6 +31,7 @@ app.use(logger);
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/listings', require('./routes/listingRoutes'));
+app.use('/api/upload', require('./routes/uploadRoutes'));
 
 // Health check route
 app.get('/health', (req, res) => {
