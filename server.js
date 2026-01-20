@@ -29,6 +29,7 @@ app.use(logger);
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/listings', require('./routes/listingRoutes'));
+app.use('/api/uploads', require('./routes/uploadRoutes'));
 
 // Health check route
 app.get('/health', (req, res) => {

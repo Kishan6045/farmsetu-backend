@@ -9,6 +9,62 @@ const ensureDirExists = (dirPath) => {
   }
 };
 
+const parseFilenameList = (value) => {
+  if (!value) {
+    return [];
+  }
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (typeof value !== 'string') {
+    return [];
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(trimmed);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+  } catch (error) {
+    return trimmed
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+  }
+  return trimmed
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+};
+
+const parseFirstFilename = (value) => {
+  const list = parseFilenameList(value);
+  return list.length ? list[0] : null;
+};
+
+const normalizeMediaPath = (value, root) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (trimmed.startsWith('/uploads/')) {
+    return trimmed;
+  }
+  return `/uploads/${root}/${trimmed}`;
+};
+
+const normalizeMediaArray = (values, root) => {
+  return values
+    .map((value) => normalizeMediaPath(value, root))
+    .filter(Boolean);
+};
+
 // Create a new listing
 const createListing = async (req, res) => {
   try {
@@ -79,14 +135,22 @@ const createListing = async (req, res) => {
     const images = [];
     let video = null;
 
-    if (req.files && Array.isArray(req.files.images)) {
+    if (req.files && Array.isArray(req.files.images) && req.files.images.length > 0) {
       req.files.images.forEach((file) => {
         images.push(`/uploads/images/${file.filename}`);
       });
+    } else {
+      const imageNames = parseFilenameList(req.body.images);
+      images.push(...normalizeMediaArray(imageNames, 'images'));
     }
 
     if (req.files && Array.isArray(req.files.video) && req.files.video[0]) {
       video = `/uploads/videos/${req.files.video[0].filename}`;
+    } else {
+      const videoName = parseFirstFilename(req.body.video);
+      if (videoName) {
+        video = normalizeMediaPath(videoName, 'videos');
+      }
     }
 
     // Ensure upload directories exist (in case they were missing)
