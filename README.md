@@ -1,14 +1,24 @@
-# FarmSetu Backend - Authentication System
+# FarmSetu Backend - Marketplace API
 
-A complete authentication system built with Node.js, Express, and MongoDB.
+A complete marketplace backend built with Node.js, Express, and MongoDB for buying and selling items.
 
 ## Features
 
+### Authentication
 - User Registration with complete profile information
 - User Login with JWT token authentication
 - Password change functionality (protected route)
 - Secure password hashing using bcrypt
 - JWT-based authentication middleware
+
+### Listings (Buy & Sell)
+- Create listings with title, description, price
+- Upload up to 3 images and 1 video
+- Address-based listing (village, taluko, district, state)
+- District-based visibility control
+- Duplicate prevention (same user, same title)
+- Status management (active/inactive)
+- Get all active listings with district filtering
 
 ## Project Structure
 
@@ -96,8 +106,12 @@ Server is running on port 5000
 
 ### Base URL
 ```
-http://localhost:5000/api/auth
+http://localhost:5000 (or port from .env)
 ```
+
+### Authentication Endpoints
+
+#### Base: `/api/auth`
 
 ### 1. Register User
 - **Endpoint:** `POST /api/auth/register`
@@ -237,24 +251,181 @@ Common HTTP status codes:
 - Password field is excluded from default queries
 - Input validation and sanitization
 
-## Testing with Postman/Thunder Client
+### Listing Endpoints
 
-1. **Register a new user:**
-   - Method: POST
-   - URL: `http://localhost:5000/api/auth/register`
-   - Body: JSON (use the register request body above)
+#### Base: `/api/listings`
 
-2. **Login:**
-   - Method: POST
-   - URL: `http://localhost:5000/api/auth/login`
-   - Body: JSON (use the login request body above)
-   - Copy the token from response
+#### 1. Create Listing
+- **Endpoint:** `POST /api/listings`
+- **Access:** Private (Requires JWT Token)
+- **Content-Type:** `multipart/form-data`
+- **Headers:**
+  ```
+  Authorization: Bearer <jwt-token>
+  ```
+- **Body (form-data):**
+  | Field | Type | Required | Description |
+  |-------|------|----------|-------------|
+  | `title` | Text | Yes | Listing title |
+  | `description` | Text | Yes | Listing description |
+  | `expectedPrice` | Text | Yes | Expected price (number) |
+  | `village` | Text | Yes | Village name |
+  | `taluko` | Text | Yes | Taluko name |
+  | `district` | Text | Yes | District name |
+  | `state` | Text | Yes | State name |
+  | `showOnlyInMyDistrict` | Text | No | "true" or "false" (default: false) |
+  | `images` | File | No | Image file (max 3) |
+  | `video` | File | No | Video file (max 1) |
 
-3. **Change Password:**
-   - Method: PUT
-   - URL: `http://localhost:5000/api/auth/change-password`
-   - Headers: `Authorization: Bearer <your-token>`
-   - Body: JSON (use the change password request body above)
+- **Success Response (201):**
+  ```json
+  {
+    "success": true,
+    "message": "Listing created successfully",
+    "data": {
+      "_id": "...",
+      "user": "...",
+      "title": "Used Tractor",
+      "description": "Well maintained",
+      "expectedPrice": 250000,
+      "images": ["/uploads/images/..."],
+      "video": "/uploads/videos/...",
+      "address": {
+        "village": "Rampur",
+        "taluko": "Mandvi",
+        "district": "Surat",
+        "state": "Gujarat"
+      },
+      "showOnlyInMyDistrict": true,
+      "status": "active",
+      "createdAt": "...",
+      "updatedAt": "..."
+    }
+  }
+  ```
+
+- **Error Response (400 - Duplicate):**
+  ```json
+  {
+    "success": false,
+    "message": "You have already created a listing with this title. Please use a different title or update your existing listing.",
+    "existingListingId": "..."
+  }
+  ```
+
+#### 2. Get Listings
+- **Endpoint:** `GET /api/listings`
+- **Access:** Private (Requires JWT Token)
+- **Headers:**
+  ```
+  Authorization: Bearer <jwt-token>
+  ```
+- **Success Response (200):**
+  ```json
+  {
+    "success": true,
+    "data": [
+      {
+        "_id": "...",
+        "user": {
+          "_id": "...",
+          "firstName": "John",
+          "lastName": "Doe"
+        },
+        "title": "Used Tractor",
+        "description": "...",
+        "expectedPrice": 250000,
+        "images": ["/uploads/images/..."],
+        "video": "/uploads/videos/...",
+        "address": {...},
+        "showOnlyInMyDistrict": true,
+        "status": "active",
+        "createdAt": "...",
+        "updatedAt": "..."
+      }
+    ]
+  }
+  ```
+- **Note:** Only returns `active` listings. Respects `showOnlyInMyDistrict` flag.
+
+## Testing with Postman
+
+### Step 1: Get Authentication Token
+
+**POST** `http://localhost:5000/api/auth/login`
+```json
+{
+  "phoneNumber": "9876543210",
+  "password": "password123"
+}
+```
+Copy the `token` from `data.token`
+
+### Step 2: Create Listing in Postman
+
+1. **Method:** `POST`
+2. **URL:** `http://localhost:5000/api/listings`
+3. **Headers:**
+   - `Authorization: Bearer YOUR_TOKEN_HERE`
+   - **DO NOT** set `Content-Type` manually
+4. **Body Tab:**
+   - Select **`form-data`** (NOT raw JSON)
+   - Add fields:
+
+| Key | Type | Value |
+|-----|------|-------|
+| `title` | **Text** | `Used Tractor` |
+| `description` | **Text** | `Well maintained` |
+| `expectedPrice` | **Text** | `250000` |
+| `village` | **Text** | `Rampur` |
+| `taluko` | **Text** | `Mandvi` |
+| `district` | **Text** | `Surat` |
+| `state` | **Text** | `Gujarat` |
+| `showOnlyInMyDistrict` | **Text** | `true` |
+| `images` | **File** | Select image (up to 3) |
+| `video` | **File** | Select video (1 max) |
+
+**Important:**
+- Text fields must be "Text" type (not "File")
+- Only `images` and `video` should be "File" type
+- Field names must be exact (case-sensitive, no trailing spaces)
+
+### Step 3: Get Listings
+
+**GET** `http://localhost:5000/api/listings`
+- Headers: `Authorization: Bearer YOUR_TOKEN`
+
+## Common Issues & Solutions
+
+### Issue: "Unexpected file field" Error
+**Problem:** A text field is set to "File" type in Postman
+
+**Solution:**
+1. Open Postman → Body → form-data
+2. Check each text field (`title`, `description`, etc.)
+3. Change dropdown from "File" to "Text"
+4. Only `images` and `video` should be "File" type
+
+### Issue: Duplicate Listing
+**Problem:** Same user trying to create listing with same title
+
+**Solution:**
+- Use a different title
+- Or update existing listing (if update API exists)
+
+### Issue: Field Name Has Tab/Space
+**Problem:** Field name has trailing whitespace (e.g., `images\t`)
+
+**Solution:**
+1. Delete the field in Postman
+2. Re-type the field name exactly (no spaces/tabs)
+3. Make sure it's exactly `images` or `video` (case-sensitive)
+
+### Issue: Files Not Uploading
+**Solution:**
+- Check file size is under 20MB
+- Verify file types (images for `images`, videos for `video`)
+- Ensure field type is "File" in Postman
 
 ## Troubleshooting
 
@@ -267,6 +438,33 @@ Common HTTP status codes:
 - **JWT Secret Error:** Make sure `JWT_SECRET` is set in `.env` file
 - **Duplicate Email/Phone:** Each user must have a unique email and phone number
 
+## Project Structure
+
+```
+FarmSetu/
+├── config/
+│   └── database.js          # MongoDB connection configuration
+├── controllers/
+│   ├── authController.js    # Authentication logic
+│   └── listingController.js # Listing logic
+├── middleware/
+│   ├── auth.js              # JWT authentication middleware
+│   ├── upload.js            # File upload middleware (multer)
+│   └── logger.js            # Request logging
+├── models/
+│   ├── User.js              # User schema/model
+│   └── Listing.js           # Listing schema/model
+├── routes/
+│   ├── authRoutes.js        # Authentication routes
+│   └── listingRoutes.js     # Listing routes
+├── uploads/                 # Uploaded files (auto-created)
+│   ├── images/              # Image uploads
+│   └── videos/              # Video uploads
+├── server.js                # Main server file
+├── .env                     # Environment variables
+└── package.json             # Dependencies and scripts
+```
+
 ## Dependencies
 
 - `express` - Web framework
@@ -275,6 +473,7 @@ Common HTTP status codes:
 - `jsonwebtoken` - JWT authentication
 - `dotenv` - Environment variable management
 - `cors` - Cross-origin resource sharing
+- `multer` - File upload handling
 
 ## License
 

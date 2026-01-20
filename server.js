@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const path = require('path');
 const connectDB = require('./config/database');
 const logger = require('./middleware/logger');
 
@@ -18,12 +19,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
 // Request logging middleware (should be after body parsers)
 app.use(logger);
 
 
 // Routes
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/listings', require('./routes/listingRoutes'));
 
 // Health check route
 app.get('/health', (req, res) => {
