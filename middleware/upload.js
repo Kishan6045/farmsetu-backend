@@ -8,6 +8,13 @@ const ensureDirExists = (dirPath) => {
   }
 };
 
+const buildUniqueFilename = (originalname) => {
+  const ext = path.extname(originalname);
+  const baseName = path.basename(originalname, ext).replace(/\s+/g, '_');
+  const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+  return `${baseName}-${uniqueSuffix}${ext}`;
+};
+
 // Configure storage for images and videos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -24,10 +31,7 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    const baseName = path.basename(file.originalname, ext).replace(/\s+/g, '_');
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `${baseName}-${uniqueSuffix}${ext}`);
+    cb(null, buildUniqueFilename(file.originalname));
   },
 });
 
@@ -90,6 +94,82 @@ const uploadListingMediaWithErrorHandling = (req, res, next) => {
   });
 };
 
+const uploadRootPattern = /^[a-z0-9][a-z0-9_-]{0,48}$/i;
+
+const resolveUploadRoot = (rootValue) => {
+  if (!rootValue || typeof rootValue !== 'string') {
+    return null;
+  }
+  const trimmed = rootValue.trim();
+  if (!trimmed || !uploadRootPattern.test(trimmed)) {
+    return null;
+  }
+  return trimmed;
+};
+
+const validateUploadRoot = (req, res, next) => {
+  const rootValue = req.params.root || req.query.root;
+  const resolvedRoot = resolveUploadRoot(rootValue);
+
+  if (!resolvedRoot) {
+    return res.status(400).json({
+      success: false,
+      message:
+        'Upload root is required and must contain only letters, numbers, "-" or "_".',
+    });
+  }
+
+  req.uploadRoot = resolvedRoot;
+  return next();
+};
+
+const commonStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadRoot = req.uploadRoot;
+    if (!uploadRoot) {
+      return cb(new Error('Upload root is required.'));
+    }
+    const uploadPath = path.join(__dirname, '..', 'uploads', uploadRoot);
+    ensureDirExists(uploadPath);
+    return cb(null, uploadPath);
+  },
+  filename: (req, file, cb) => {
+    return cb(null, buildUniqueFilename(file.originalname));
+  },
+});
+
+const commonFileFilter = (req, file, cb) => {
+  const isImage = file.mimetype.startsWith('image/');
+  const isVideo = file.mimetype.startsWith('video/');
+  if (!isImage && !isVideo) {
+    return cb(new Error('Only image or video files are allowed'), false);
+  }
+  return cb(null, true);
+};
+
+const COMMON_MAX_FILES = 10;
+const COMMON_FILE_SIZE_LIMIT = 20 * 1024 * 1024;
+
+const commonUpload = multer({
+  storage: commonStorage,
+  fileFilter: commonFileFilter,
+  limits: {
+    fileSize: COMMON_FILE_SIZE_LIMIT,
+    files: COMMON_MAX_FILES,
+  },
+});
+
+const uploadCommonMedia = commonUpload.array('files', COMMON_MAX_FILES);
+
+const uploadCommonMediaWithErrorHandling = (req, res, next) => {
+  uploadCommonMedia(req, res, (err) => {
+    if (err) {
+      return handleCommonUploadErrors(err, req, res, next);
+    }
+    return next();
+  });
+};
+
 // Error handling wrapper for multer
 const handleUploadErrors = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -131,9 +211,41 @@ const handleUploadErrors = (err, req, res, next) => {
   next();
 };
 
+const handleCommonUploadErrors = (err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+      return res.status(400).json({
+        success: false,
+        message: `Too many files. Maximum ${COMMON_MAX_FILES} files allowed.`,
+      });
+    }
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({
+        success: false,
+        message: `File too large. Maximum file size is ${
+          COMMON_FILE_SIZE_LIMIT / (1024 * 1024)
+        }MB.`,
+      });
+    }
+    return res.status(400).json({
+      success: false,
+      message: `Upload error: ${err.message}`,
+    });
+  }
+  if (err) {
+    return res.status(400).json({
+      success: false,
+      message: err.message || 'File upload error',
+    });
+  }
+  return next();
+};
+
 module.exports = {
   uploadListingMedia,
   uploadListingMediaWithErrorHandling,
   handleUploadErrors,
+  uploadCommonMediaWithErrorHandling,
+  validateUploadRoot,
 };
 
