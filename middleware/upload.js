@@ -1,18 +1,22 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-
+ 
 const ensureDirExists = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
 };
-
+ 
 // Configure storage for images and videos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let uploadPath;
-    if (file.fieldname === 'images' || file.fieldname === 'image') {
+    if (
+      file.fieldname === 'images' ||
+      file.fieldname === 'image' ||
+      file.fieldname === 'images[]'
+    ) {
       uploadPath = path.join(__dirname, '..', 'uploads', 'images');
     } else if (file.fieldname === 'video' || file.fieldname === 'videos') {
       uploadPath = path.join(__dirname, '..', 'uploads', 'videos');
@@ -29,11 +33,15 @@ const storage = multer.diskStorage({
     cb(null, `${baseName}-${uniqueSuffix}${ext}`);
   },
 });
-
+ 
 // File filter to accept images and videos
 const fileFilter = (req, file, cb) => {
   // Allow images for image fields
-  if (file.fieldname === 'images' || file.fieldname === 'image') {
+  if (
+    file.fieldname === 'images' ||
+    file.fieldname === 'image' ||
+    file.fieldname === 'images[]'
+  ) {
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Only image files are allowed for images field'), false);
     }
@@ -51,7 +59,7 @@ const fileFilter = (req, file, cb) => {
   // Default: reject unknown field types
   return cb(new Error('Invalid file field'), false);
 };
-
+ 
 const upload = multer({
   storage,
   fileFilter,
@@ -59,23 +67,52 @@ const upload = multer({
     fileSize: 20 * 1024 * 1024, // 20MB per file
   },
 });
-
+ 
+const getFirstFileFromFields = (files, fieldNames) => {
+  if (!files) {
+    return null;
+  }
+  for (const fieldName of fieldNames) {
+    const fileList = files[fieldName];
+    if (Array.isArray(fileList) && fileList.length > 0) {
+      return fileList[0];
+    }
+  }
+  return null;
+};
+ 
+const collectFilesFromFields = (files, fieldNames) => {
+  if (!files) {
+    return [];
+  }
+  return fieldNames.reduce((acc, fieldName) => {
+    const fileList = files[fieldName];
+    if (Array.isArray(fileList) && fileList.length > 0) {
+      acc.push(...fileList);
+    }
+    return acc;
+  }, []);
+};
+ 
 // Middleware for listing uploads: max 3 images, 1 video
 const uploadListingMedia = upload.fields([
+  { name: 'image', maxCount: 1 },
   { name: 'images', maxCount: 3 },
+  { name: 'images[]', maxCount: 3 },
   { name: 'video', maxCount: 1 },
+  { name: 'videos', maxCount: 1 },
 ]);
-
+ 
 // Wrapper to handle multer errors properly
 const uploadListingMediaWithErrorHandling = (req, res, next) => {
   // Ensure req.body exists before multer processes
   if (!req.body) {
     req.body = {};
   }
-
+ 
   // Log all incoming fields for debugging
   console.log('📋 Incoming form fields (before multer):', Object.keys(req.body || {}));
-
+ 
   uploadListingMedia(req, res, (err) => {
     if (err) {
       // Log detailed error information
@@ -102,7 +139,7 @@ const uploadListingMediaWithErrorHandling = (req, res, next) => {
     next();
   });
 };
-
+ 
 // Error handling wrapper for multer
 const handleUploadErrors = (err, req, res, next) => {
   if (err instanceof multer.MulterError) {
@@ -143,16 +180,26 @@ const handleUploadErrors = (err, req, res, next) => {
   }
   next();
 };
-
+ 
 // Common image upload middleware (single image)
-const uploadSingleImage = upload.single('image');
-
+const uploadSingleImage = upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 1 },
+  { name: 'images[]', maxCount: 1 },
+]);
+ 
 // Common image upload middleware (multiple images)
-const uploadMultipleImages = upload.array('images', 10); // Max 10 images for common upload
-
+const uploadMultipleImages = upload.fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'images[]', maxCount: 10 },
+]); // Max 10 images for common upload
+ 
 // Common video upload middleware (single video)
-const uploadSingleVideo = upload.single('video');
-
+const uploadSingleVideo = upload.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'videos', maxCount: 1 },
+]);
+ 
 // Wrapper for single image upload with error handling
 const uploadSingleImageWithErrorHandling = (req, res, next) => {
   uploadSingleImage(req, res, (err) => {
@@ -164,10 +211,14 @@ const uploadSingleImageWithErrorHandling = (req, res, next) => {
       });
       return handleUploadErrors(err, req, res, next);
     }
+    const file = getFirstFileFromFields(req.files, ['image', 'images', 'images[]']);
+    if (file) {
+      req.file = file;
+    }
     next();
   });
 };
-
+ 
 // Wrapper for multiple images upload with error handling
 const uploadMultipleImagesWithErrorHandling = (req, res, next) => {
   uploadMultipleImages(req, res, (err) => {
@@ -179,10 +230,11 @@ const uploadMultipleImagesWithErrorHandling = (req, res, next) => {
       });
       return handleUploadErrors(err, req, res, next);
     }
+    req.files = collectFilesFromFields(req.files, ['images', 'images[]']);
     next();
   });
 };
-
+ 
 // Wrapper for single video upload with error handling
 const uploadSingleVideoWithErrorHandling = (req, res, next) => {
   uploadSingleVideo(req, res, (err) => {
@@ -194,10 +246,14 @@ const uploadSingleVideoWithErrorHandling = (req, res, next) => {
       });
       return handleUploadErrors(err, req, res, next);
     }
+    const file = getFirstFileFromFields(req.files, ['video', 'videos']);
+    if (file) {
+      req.file = file;
+    }
     next();
   });
 };
-
+ 
 module.exports = {
   uploadListingMedia,
   uploadListingMediaWithErrorHandling,
@@ -209,4 +265,3 @@ module.exports = {
   uploadMultipleImagesWithErrorHandling,
   uploadSingleVideoWithErrorHandling,
 };
-
