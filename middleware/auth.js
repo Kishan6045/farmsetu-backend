@@ -37,6 +37,16 @@ const protect = async (req, res, next) => {
 
         next();
     } catch (error) {
+        console.error('❌ Auth Error:', {
+            message: error.message,
+            name: error.name,
+        });
+        
+        // Ensure response hasn't been sent
+        if (res.headersSent) {
+            return;
+        }
+        
         return res.status(401).json({
             success: false,
             message: 'Not authorized to access this route. Invalid token.',

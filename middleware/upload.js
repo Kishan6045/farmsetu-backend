@@ -1,13 +1,13 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
- 
+
 const ensureDirExists = (dirPath) => {
   if (!fs.existsSync(dirPath)) {
     fs.mkdirSync(dirPath, { recursive: true });
   }
 };
- 
+
 // Configure storage for images and videos
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -33,7 +33,7 @@ const storage = multer.diskStorage({
     cb(null, `${baseName}-${uniqueSuffix}${ext}`);
   },
 });
- 
+
 // File filter to accept images and videos
 const fileFilter = (req, file, cb) => {
   // Allow images for image fields
@@ -47,7 +47,7 @@ const fileFilter = (req, file, cb) => {
     }
     return cb(null, true);
   }
-  
+
   // Allow videos for video fields
   if (file.fieldname === 'video' || file.fieldname === 'videos') {
     if (!file.mimetype.startsWith('video/')) {
@@ -55,11 +55,11 @@ const fileFilter = (req, file, cb) => {
     }
     return cb(null, true);
   }
-  
+
   // Default: reject unknown field types
   return cb(new Error('Invalid file field'), false);
 };
- 
+
 const upload = multer({
   storage,
   fileFilter,
@@ -67,7 +67,7 @@ const upload = multer({
     fileSize: 20 * 1024 * 1024, // 20MB per file
   },
 });
- 
+
 const getFirstFileFromFields = (files, fieldNames) => {
   if (!files) {
     return null;
@@ -80,7 +80,7 @@ const getFirstFileFromFields = (files, fieldNames) => {
   }
   return null;
 };
- 
+
 const collectFilesFromFields = (files, fieldNames) => {
   if (!files) {
     return [];
@@ -93,7 +93,7 @@ const collectFilesFromFields = (files, fieldNames) => {
     return acc;
   }, []);
 };
- 
+
 // Middleware for listing uploads: max 3 images, 1 video
 const uploadListingMedia = upload.fields([
   { name: 'image', maxCount: 1 },
@@ -102,17 +102,18 @@ const uploadListingMedia = upload.fields([
   { name: 'video', maxCount: 1 },
   { name: 'videos', maxCount: 1 },
 ]);
- 
+
 // Wrapper to handle multer errors properly
 const uploadListingMediaWithErrorHandling = (req, res, next) => {
   // Ensure req.body exists before multer processes
   if (!req.body) {
     req.body = {};
   }
- 
+
   // Log all incoming fields for debugging
   console.log('📋 Incoming form fields (before multer):', Object.keys(req.body || {}));
- 
+  console.log('📋 Content-Type:', req.headers['content-type']);
+
   uploadListingMedia(req, res, (err) => {
     if (err) {
       // Log detailed error information
@@ -121,38 +122,52 @@ const uploadListingMediaWithErrorHandling = (req, res, next) => {
         field: err.field,
         message: err.message,
         name: err.name,
+        stack: err.stack,
       });
       return handleUploadErrors(err, req, res, next);
     }
-    
+
     // Ensure req.body exists after multer (multer should populate it)
     if (!req.body) {
       req.body = {};
     }
-    
+
     // Log after multer processing
+    console.log('✅ Multer processing successful');
     console.log('📋 Form fields (after multer):', Object.keys(req.body || {}));
     if (req.files) {
       console.log('📁 File fields:', Object.keys(req.files));
+      Object.keys(req.files).forEach(field => {
+        console.log(`  - ${field}: ${req.files[field].length} file(s)`);
+      });
+    } else {
+      console.log('📁 No files uploaded');
     }
-    
+
     next();
   });
 };
- 
+
 // Error handling wrapper for multer
 const handleUploadErrors = (err, req, res, next) => {
+  // Ensure response hasn't been sent
+  if (res.headersSent) {
+    return next(err);
+  }
+
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_COUNT') {
       return res.status(400).json({
         success: false,
         message: 'Too many files. Maximum 3 images and 1 video allowed.',
+        code: 'LIMIT_FILE_COUNT',
       });
     }
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(400).json({
         success: false,
         message: 'File too large. Maximum file size is 20MB.',
+        code: 'LIMIT_FILE_SIZE',
       });
     }
     if (err.code === 'LIMIT_UNEXPECTED_FILE') {
@@ -162,44 +177,50 @@ const handleUploadErrors = (err, req, res, next) => {
       console.error('💡 Tip: Check Postman - this field is set to "File" type but should be "Text" type');
       return res.status(400).json({
         success: false,
-        message: `Unexpected file field "${fieldName}". Only "images" (max 3) and "video" (max 1) fields are allowed. Please check that all text fields in Postman are set to "Text" type, not "File" type.`,
+        message: `Unexpected file field "${fieldName}". Only "images" (max 3) and "video" (max 1) fields are allowed.`,
+        code: 'LIMIT_UNEXPECTED_FILE',
         field: fieldName,
-        hint: 'In Postman, go to Body → form-data and change the field type from "File" to "Text" for: ' + fieldName,
       });
     }
     return res.status(400).json({
       success: false,
       message: `Upload error: ${err.message}`,
+      code: err.code,
     });
   }
+
+  // Handle other errors (file filter errors, etc.)
   if (err) {
+    console.error('❌ Upload Error:', err.message);
     return res.status(400).json({
       success: false,
       message: err.message || 'File upload error',
+      error: err.name || 'UploadError',
     });
   }
+
   next();
 };
- 
+
 // Common image upload middleware (single image)
 const uploadSingleImage = upload.fields([
   { name: 'image', maxCount: 1 },
   { name: 'images', maxCount: 1 },
   { name: 'images[]', maxCount: 1 },
 ]);
- 
+
 // Common image upload middleware (multiple images)
 const uploadMultipleImages = upload.fields([
   { name: 'images', maxCount: 10 },
   { name: 'images[]', maxCount: 10 },
 ]); // Max 10 images for common upload
- 
+
 // Common video upload middleware (single video)
 const uploadSingleVideo = upload.fields([
   { name: 'video', maxCount: 1 },
   { name: 'videos', maxCount: 1 },
 ]);
- 
+
 // Wrapper for single image upload with error handling
 const uploadSingleImageWithErrorHandling = (req, res, next) => {
   uploadSingleImage(req, res, (err) => {
@@ -218,7 +239,7 @@ const uploadSingleImageWithErrorHandling = (req, res, next) => {
     next();
   });
 };
- 
+
 // Wrapper for multiple images upload with error handling
 const uploadMultipleImagesWithErrorHandling = (req, res, next) => {
   uploadMultipleImages(req, res, (err) => {
@@ -234,7 +255,7 @@ const uploadMultipleImagesWithErrorHandling = (req, res, next) => {
     next();
   });
 };
- 
+
 // Wrapper for single video upload with error handling
 const uploadSingleVideoWithErrorHandling = (req, res, next) => {
   uploadSingleVideo(req, res, (err) => {
@@ -253,7 +274,7 @@ const uploadSingleVideoWithErrorHandling = (req, res, next) => {
     next();
   });
 };
- 
+
 module.exports = {
   uploadListingMedia,
   uploadListingMediaWithErrorHandling,

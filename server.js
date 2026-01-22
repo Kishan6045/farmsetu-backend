@@ -15,11 +15,28 @@ connectDB();
 const app = express();
 
 // Middleware
-app.use(cors());
+// Configure CORS for mobile apps - allow all origins with credentials
+app.use(cors({
+  origin: '*', // Allow all origins for mobile apps
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  exposedHeaders: ['Content-Type', 'Authorization'],
+  credentials: false,
+  maxAge: 86400, // 24 hours
+}));
+
+// Handle preflight requests explicitly
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+  res.sendStatus(200);
+});
+
 // Note: express.json() and express.urlencoded() skip multipart/form-data automatically
 // Multer will handle multipart/form-data and populate req.body
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' })); // Increase limit for large payloads
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -51,16 +68,72 @@ app.use((req, res) => {
 
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Server Error:', {
+    message: err.message,
+    stack: err.stack,
+    status: err.status,
+    code: err.code,
+    field: err.field,
+  });
+  
+  // Handle multer errors specifically
+  if (err.name === 'MulterError') {
+    return res.status(400).json({
+      success: false,
+      message: err.message || 'File upload error',
+      code: err.code,
+    });
+  }
+  
+  // Handle validation errors
+  if (err.name === 'ValidationError') {
+    return res.status(400).json({
+      success: false,
+      message: err.message || 'Validation error',
+    });
+  }
+  
+  // Handle JWT errors
+  if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
+    return res.status(401).json({
+      success: false,
+      message: 'Authentication failed. Please login again.',
+    });
+  }
+  
+  // Default error response
   res.status(err.status || 500).json({
     success: false,
     message: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   });
 });
 
 // Start server
 const PORT = process.env.PORT || 5000;
 
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+const server = app.listen(PORT, () => {
+  console.log(`✅ Server is running on port ${PORT}`);
+  console.log(`🌐 Health check: http://localhost:${PORT}/health`);
+});
+
+// Increase timeout for file uploads (default is 2 minutes, increase to 5 minutes)
+server.timeout = 5 * 60 * 1000; // 5 minutes
+server.keepAliveTimeout = 65000; // 65 seconds
+server.headersTimeout = 66000; // 66 seconds
+
+// Handle server errors
+server.on('error', (error) => {
+  console.error('❌ Server Error:', error);
+});
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('❌ Uncaught Exception:', error);
+  process.exit(1);
+});
+
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
 });
