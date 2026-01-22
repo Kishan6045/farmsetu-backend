@@ -69,7 +69,7 @@ app.use((err, req, res, next) => {
     code: err.code,
     field: err.field,
   });
-  
+
   // Handle multer errors specifically
   if (err.name === 'MulterError') {
     return res.status(400).json({
@@ -78,7 +78,7 @@ app.use((err, req, res, next) => {
       code: err.code,
     });
   }
-  
+
   // Handle validation errors
   if (err.name === 'ValidationError') {
     return res.status(400).json({
@@ -86,7 +86,7 @@ app.use((err, req, res, next) => {
       message: err.message || 'Validation error',
     });
   }
-  
+
   // Handle JWT errors
   if (err.name === 'JsonWebTokenError' || err.name === 'TokenExpiredError') {
     return res.status(401).json({
@@ -94,7 +94,7 @@ app.use((err, req, res, next) => {
       message: 'Authentication failed. Please login again.',
     });
   }
-  
+
   // Default error response
   res.status(err.status || 500).json({
     success: false,
