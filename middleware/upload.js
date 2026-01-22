@@ -109,7 +109,10 @@ const upload = multer({
   fileFilter,
   limits: {
     fileSize: 20 * 1024 * 1024, // 20MB per file
+    files: 10, // Allow up to 10 files total (3 images + 1 video + buffer)
   },
+  // Preserve file extension and handle slow uploads
+  preservePath: false,
 });
 
 const getFirstFileFromFields = (files, fieldNames) => {
@@ -149,20 +152,56 @@ const uploadListingMediaWithErrorHandling = (req, res, next) => {
     req.body = {};
   }
 
+  // Set longer timeout for this specific request (file uploads can be slow)
+  req.setTimeout(10 * 60 * 1000, () => {
+    if (!res.headersSent) {
+      console.error('❌ Request timeout during file upload');
+      return res.status(408).json({
+        success: false,
+        message: 'Upload timeout. Please try again with smaller files or better network connection.',
+      });
+    }
+  });
+
   // Log all incoming fields for debugging
+  const uploadStartTime = Date.now();
   console.log('📋 Incoming form fields (before multer):', Object.keys(req.body || {}));
   console.log('📋 Content-Type:', req.headers['content-type']);
+  console.log('⏱️  Upload started at:', new Date().toISOString());
+
+  // Handle connection close/abort during upload
+  req.on('close', () => {
+    if (!res.headersSent) {
+      console.warn('⚠️  Client closed connection during upload');
+    }
+  });
+
+  req.on('aborted', () => {
+    console.warn('⚠️  Client aborted upload request');
+  });
 
   uploadListingMedia(req, res, (err) => {
     if (err) {
       // Log detailed error information
+      const uploadDuration = Date.now() - uploadStartTime;
       console.error('❌ Multer Error Details:', {
         code: err.code,
         field: err.field,
         message: err.message,
         name: err.name,
+        uploadDuration: `${(uploadDuration / 1000).toFixed(2)}s`,
         stack: err.stack,
       });
+      
+      // Check if it's a timeout-related error
+      if (err.message && (err.message.includes('timeout') || err.message.includes('ECONNRESET'))) {
+        return res.status(408).json({
+          success: false,
+          message: 'Upload timeout. The connection was too slow. Please try again with a better network connection or smaller files.',
+          code: 'UPLOAD_TIMEOUT',
+        });
+      }
+      
       return handleUploadErrors(err, req, res, next);
     }
 

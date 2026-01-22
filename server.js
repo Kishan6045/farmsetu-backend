@@ -32,6 +32,16 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' })); // Increase limit for large payloads
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
+// Middleware to handle slow uploads - keep connection alive
+app.use((req, res, next) => {
+  // For file uploads, set longer timeout
+  if (req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data')) {
+    req.setTimeout(10 * 60 * 1000); // 10 minutes for file uploads
+    res.setTimeout(10 * 60 * 1000);
+  }
+  next();
+});
+
 // Serve uploaded files statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -111,14 +121,29 @@ const server = app.listen(PORT, () => {
   console.log(`🌐 Health check: http://localhost:${PORT}/health`);
 });
 
-// Increase timeout for file uploads (default is 2 minutes, increase to 5 minutes)
-server.timeout = 5 * 60 * 1000; // 5 minutes
-server.keepAliveTimeout = 65000; // 65 seconds
-server.headersTimeout = 66000; // 66 seconds
+// Increase timeout for file uploads - handle slow mobile connections
+server.timeout = 10 * 60 * 1000; // 10 minutes for large/slow uploads
+server.keepAliveTimeout = 120000; // 2 minutes - keep connection alive longer
+server.headersTimeout = 121000; // 2 minutes 1 second - slightly more than keepAlive
+server.requestTimeout = 10 * 60 * 1000; // 10 minutes request timeout
 
 // Handle server errors
 server.on('error', (error) => {
   console.error('❌ Server Error:', error);
+});
+
+// Handle client connection errors (timeouts, aborts, etc.)
+server.on('clientError', (err, socket) => {
+  console.error('❌ Client Error:', err.message);
+  if (!socket.destroyed) {
+    socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
+  }
+});
+
+// Handle request timeout
+server.on('timeout', (socket) => {
+  console.warn('⚠️  Request timeout - connection kept alive too long');
+  // Don't destroy immediately, let the request finish if it's close
 });
 
 // Handle uncaught exceptions
