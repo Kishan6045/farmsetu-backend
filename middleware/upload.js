@@ -12,7 +12,11 @@ const ensureDirExists = (dirPath) => {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let uploadPath;
-    if (file.fieldname === 'images' || file.fieldname === 'image') {
+    if (
+      file.fieldname === 'images' ||
+      file.fieldname === 'image' ||
+      file.fieldname === 'images[]'
+    ) {
       uploadPath = path.join(__dirname, '..', 'uploads', 'images');
     } else if (file.fieldname === 'video' || file.fieldname === 'videos') {
       uploadPath = path.join(__dirname, '..', 'uploads', 'videos');
@@ -33,7 +37,11 @@ const storage = multer.diskStorage({
 // File filter to accept images and videos
 const fileFilter = (req, file, cb) => {
   // Allow images for image fields
-  if (file.fieldname === 'images' || file.fieldname === 'image') {
+  if (
+    file.fieldname === 'images' ||
+    file.fieldname === 'image' ||
+    file.fieldname === 'images[]'
+  ) {
     if (!file.mimetype.startsWith('image/')) {
       return cb(new Error('Only image files are allowed for images field'), false);
     }
@@ -62,8 +70,11 @@ const upload = multer({
 
 // Middleware for listing uploads: max 3 images, 1 video
 const uploadListingMedia = upload.fields([
+  { name: 'image', maxCount: 1 },
   { name: 'images', maxCount: 3 },
+  { name: 'images[]', maxCount: 3 },
   { name: 'video', maxCount: 1 },
+  { name: 'videos', maxCount: 1 },
 ]);
 
 // Wrapper to handle multer errors properly
