@@ -68,6 +68,32 @@ const upload = multer({
   },
 });
 
+const getFirstFileFromFields = (files, fieldNames) => {
+  if (!files) {
+    return null;
+  }
+  for (const fieldName of fieldNames) {
+    const fileList = files[fieldName];
+    if (Array.isArray(fileList) && fileList.length > 0) {
+      return fileList[0];
+    }
+  }
+  return null;
+};
+
+const collectFilesFromFields = (files, fieldNames) => {
+  if (!files) {
+    return [];
+  }
+  return fieldNames.reduce((acc, fieldName) => {
+    const fileList = files[fieldName];
+    if (Array.isArray(fileList) && fileList.length > 0) {
+      acc.push(...fileList);
+    }
+    return acc;
+  }, []);
+};
+
 // Middleware for listing uploads: max 3 images, 1 video
 const uploadListingMedia = upload.fields([
   { name: 'image', maxCount: 1 },
@@ -156,13 +182,23 @@ const handleUploadErrors = (err, req, res, next) => {
 };
 
 // Common image upload middleware (single image)
-const uploadSingleImage = upload.single('image');
+const uploadSingleImage = upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'images', maxCount: 1 },
+  { name: 'images[]', maxCount: 1 },
+]);
 
 // Common image upload middleware (multiple images)
-const uploadMultipleImages = upload.array('images', 10); // Max 10 images for common upload
+const uploadMultipleImages = upload.fields([
+  { name: 'images', maxCount: 10 },
+  { name: 'images[]', maxCount: 10 },
+]); // Max 10 images for common upload
 
 // Common video upload middleware (single video)
-const uploadSingleVideo = upload.single('video');
+const uploadSingleVideo = upload.fields([
+  { name: 'video', maxCount: 1 },
+  { name: 'videos', maxCount: 1 },
+]);
 
 // Wrapper for single image upload with error handling
 const uploadSingleImageWithErrorHandling = (req, res, next) => {
@@ -174,6 +210,10 @@ const uploadSingleImageWithErrorHandling = (req, res, next) => {
         name: err.name,
       });
       return handleUploadErrors(err, req, res, next);
+    }
+    const file = getFirstFileFromFields(req.files, ['image', 'images', 'images[]']);
+    if (file) {
+      req.file = file;
     }
     next();
   });
@@ -190,6 +230,7 @@ const uploadMultipleImagesWithErrorHandling = (req, res, next) => {
       });
       return handleUploadErrors(err, req, res, next);
     }
+    req.files = collectFilesFromFields(req.files, ['images', 'images[]']);
     next();
   });
 };
@@ -204,6 +245,10 @@ const uploadSingleVideoWithErrorHandling = (req, res, next) => {
         name: err.name,
       });
       return handleUploadErrors(err, req, res, next);
+    }
+    const file = getFirstFileFromFields(req.files, ['video', 'videos']);
+    if (file) {
+      req.file = file;
     }
     next();
   });
