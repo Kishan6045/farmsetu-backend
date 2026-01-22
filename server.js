@@ -16,6 +16,7 @@ const app = express();
 
 // Middleware
 // Configure CORS for mobile apps - allow all origins with credentials
+// CORS middleware automatically handles OPTIONS preflight requests
 app.use(cors({
   origin: '*', // Allow all origins for mobile apps
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -23,15 +24,8 @@ app.use(cors({
   exposedHeaders: ['Content-Type', 'Authorization'],
   credentials: false,
   maxAge: 86400, // 24 hours
+  preflightContinue: false, // Let CORS handle preflight
 }));
-
-// Handle preflight requests explicitly
-app.options('*', (req, res) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
-  res.sendStatus(200);
-});
 
 // Note: express.json() and express.urlencoded() skip multipart/form-data automatically
 // Multer will handle multipart/form-data and populate req.body
