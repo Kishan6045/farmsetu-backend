@@ -2,10 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { createListing, getListings } = require('../controllers/listingController');
 const { protect } = require('../middleware/auth');
+const { uploadListingMediaWithErrorHandling } = require('../middleware/upload');
 
 // POST /api/listings
-// Create a new listing (authenticated) - accepts only filenames in JSON, no file upload
-router.post('/', protect, createListing);
+// Create a new listing (authenticated) - supports multipart/form-data uploads
+router.post('/', protect, uploadListingMediaWithErrorHandling, createListing);
 
 // GET /api/listings
 // Get listings visible to the authenticated user, honoring showOnlyInMyDistrict

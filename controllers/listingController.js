@@ -4,6 +4,7 @@ const Listing = require('../models/Listing');
 // Create a new listing
 const createListing = async (req, res) => {
   try {
+    const body = req.body || {};
     const {
       title,
       description,
@@ -13,9 +14,77 @@ const createListing = async (req, res) => {
       district,
       state,
       showOnlyInMyDistrict,
-      images = [],   // Array of filenames: ["img1.jpg", "img2.jpg"]
-      video = null,  // Single filename: "vid1.mp4"
-    } = req.body;
+      images, // Array of filenames or JSON string
+      video, // Single filename
+    } = body;
+
+    const parsedAddress =
+      typeof body.address === 'string'
+        ? (() => {
+            try {
+              return JSON.parse(body.address);
+            } catch (error) {
+              return {};
+            }
+          })()
+        : body.address || {};
+
+    const userAddress = req.user && req.user.address ? req.user.address : {};
+    const resolvedVillage =
+      village ||
+      body.villageName ||
+      parsedAddress.village ||
+      parsedAddress.villageName ||
+      userAddress.village ||
+      userAddress.villageName;
+    const resolvedTaluko = taluko || parsedAddress.taluko || userAddress.taluko;
+    const resolvedDistrict = district || parsedAddress.district || userAddress.district;
+    const resolvedState = state || parsedAddress.state || userAddress.state;
+
+    const files = req.files || {};
+    const imageFiles = [
+      ...(files.images || []),
+      ...(files.image || []),
+      ...(files['images[]'] || []),
+    ];
+    const imagesFromFiles = imageFiles.map((file) => file.filename);
+
+    const parseImagesFromBody = (value) => {
+      if (!value) {
+        return [];
+      }
+      if (Array.isArray(value)) {
+        return value.filter(Boolean);
+      }
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) {
+          return [];
+        }
+        try {
+          const parsed = JSON.parse(trimmed);
+          if (Array.isArray(parsed)) {
+            return parsed.filter(Boolean);
+          }
+        } catch (error) {
+          // Fallback to comma-separated parsing
+        }
+        return trimmed
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
+      }
+      return [];
+    };
+
+    const imagesFromBody = parseImagesFromBody(images);
+    const imagesArray = imagesFromFiles.length > 0 ? imagesFromFiles : imagesFromBody;
+
+    const videoFiles = [...(files.video || []), ...(files.videos || [])];
+    const videoFromFiles = videoFiles.length > 0 ? videoFiles[0].filename : null;
+    const videoFromBody =
+      typeof video === 'string' ? (video.trim() ? video.trim() : null) : video || null;
+    const resolvedVideo = videoFromFiles || videoFromBody;
 
     // Basic validation for required fields
     if (!title || !description || !expectedPrice) {
@@ -25,7 +94,7 @@ const createListing = async (req, res) => {
       });
     }
 
-    if (!village || !taluko || !district || !state) {
+    if (!resolvedVillage || !resolvedTaluko || !resolvedDistrict || !resolvedState) {
       return res.status(400).json({
         success: false,
         message: 'Address fields (village, taluko, district, state) are required.',
@@ -69,21 +138,18 @@ const createListing = async (req, res) => {
       title: trimmedTitle,
     });
 
-    // Ensure images is an array
-    const imagesArray = Array.isArray(images) ? images : [];
-
     const listing = await Listing.create({
       user: req.user._id,
       title,
       description,
       expectedPrice: numericPrice,
       images: imagesArray,
-      video: video || null,
+      video: resolvedVideo || null,
       address: {
-        village,
-        taluko,
-        district,
-        state,
+        village: resolvedVillage,
+        taluko: resolvedTaluko,
+        district: resolvedDistrict,
+        state: resolvedState,
       },
       showOnlyInMyDistrict: showOnlyInMyDistrict === 'true' || showOnlyInMyDistrict === true,
     });
