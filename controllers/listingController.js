@@ -41,12 +41,36 @@ const createListing = async (req, res) => {
     const resolvedDistrict = district || parsedAddress.district || userAddress.district;
     const resolvedState = state || parsedAddress.state || userAddress.state;
 
-    const files = req.files || {};
-    const imageFiles = [
-      ...(files.images || []),
-      ...(files.image || []),
-      ...(files['images[]'] || []),
-    ];
+    // Handle files - support both array format (from upload.any()) and object format
+    let allFiles = [];
+    if (Array.isArray(req.files)) {
+      // Files are in array format (from upload.any())
+      allFiles = req.files;
+    } else if (req.files && typeof req.files === 'object') {
+      // Files are organized by field name (old format)
+      Object.values(req.files).forEach(fileArray => {
+        if (Array.isArray(fileArray)) {
+          allFiles.push(...fileArray);
+        } else {
+          allFiles.push(fileArray);
+        }
+      });
+    }
+    
+    // Separate images and videos based on mimetype and field name
+    const imageFiles = allFiles.filter(file => {
+      const fieldName = file.fieldname || '';
+      const isImageField = 
+        fieldName === 'image' ||
+        fieldName === 'images' ||
+        fieldName === 'images[]' ||
+        fieldName.startsWith('images[') ||
+        fieldName.startsWith('image_') ||
+        /^images?\[/.test(fieldName) ||
+        file.mimetype.startsWith('image/');
+      return isImageField;
+    });
+    
     const imagesFromFiles = imageFiles.map((file) => file.filename);
 
     const parseImagesFromBody = (value) => {
@@ -80,7 +104,17 @@ const createListing = async (req, res) => {
     const imagesFromBody = parseImagesFromBody(images);
     const imagesArray = imagesFromFiles.length > 0 ? imagesFromFiles : imagesFromBody;
 
-    const videoFiles = [...(files.video || []), ...(files.videos || [])];
+    // Get video files
+    const videoFiles = allFiles.filter(file => {
+      const fieldName = file.fieldname || '';
+      const isVideoField = 
+        fieldName === 'video' ||
+        fieldName === 'videos' ||
+        fieldName.startsWith('video[') ||
+        fieldName.startsWith('video_') ||
+        file.mimetype.startsWith('video/');
+      return isVideoField;
+    });
     const videoFromFiles = videoFiles.length > 0 ? videoFiles[0].filename : null;
     const videoFromBody =
       typeof video === 'string' ? (video.trim() ? video.trim() : null) : video || null;

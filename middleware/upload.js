@@ -12,13 +12,29 @@ const ensureDirExists = (dirPath) => {
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     let uploadPath;
-    if (
-      file.fieldname === 'images' ||
-      file.fieldname === 'image' ||
-      file.fieldname === 'images[]'
-    ) {
+    const fieldName = file.fieldname || '';
+    
+    // Check if field name matches image patterns (flexible for mobile apps)
+    const isImageField = 
+      fieldName === 'image' ||
+      fieldName === 'images' ||
+      fieldName === 'images[]' ||
+      fieldName.startsWith('images[') ||
+      fieldName.startsWith('image_') ||
+      /^images?\[/.test(fieldName) ||
+      file.mimetype.startsWith('image/'); // Fallback: check mimetype
+    
+    // Check if field name matches video patterns
+    const isVideoField = 
+      fieldName === 'video' ||
+      fieldName === 'videos' ||
+      fieldName.startsWith('video[') ||
+      fieldName.startsWith('video_') ||
+      file.mimetype.startsWith('video/'); // Fallback: check mimetype
+    
+    if (isImageField) {
       uploadPath = path.join(__dirname, '..', 'uploads', 'images');
-    } else if (file.fieldname === 'video' || file.fieldname === 'videos') {
+    } else if (isVideoField) {
       uploadPath = path.join(__dirname, '..', 'uploads', 'videos');
     } else {
       uploadPath = path.join(__dirname, '..', 'uploads', 'others');
@@ -35,29 +51,57 @@ const storage = multer.diskStorage({
 });
 
 // File filter to accept images and videos
+// More flexible to handle various mobile app field name patterns
 const fileFilter = (req, file, cb) => {
+  const fieldName = file.fieldname || '';
+  
+  // Check if field name matches image patterns (flexible for mobile apps)
+  // Supports: 'image', 'images', 'images[]', 'images[0]', 'image_0', etc.
+  const isImageField = 
+    fieldName === 'image' ||
+    fieldName === 'images' ||
+    fieldName === 'images[]' ||
+    fieldName.startsWith('images[') ||
+    fieldName.startsWith('image_') ||
+    /^images?\[/.test(fieldName);
+  
+  // Check if field name matches video patterns
+  const isVideoField = 
+    fieldName === 'video' ||
+    fieldName === 'videos' ||
+    fieldName.startsWith('video[') ||
+    fieldName.startsWith('video_');
+  
   // Allow images for image fields
-  if (
-    file.fieldname === 'images' ||
-    file.fieldname === 'image' ||
-    file.fieldname === 'images[]'
-  ) {
+  if (isImageField) {
     if (!file.mimetype.startsWith('image/')) {
-      return cb(new Error('Only image files are allowed for images field'), false);
+      return cb(new Error(`Only image files are allowed for field "${fieldName}"`), false);
     }
     return cb(null, true);
   }
 
   // Allow videos for video fields
-  if (file.fieldname === 'video' || file.fieldname === 'videos') {
+  if (isVideoField) {
     if (!file.mimetype.startsWith('video/')) {
-      return cb(new Error('Only video files are allowed for video field'), false);
+      return cb(new Error(`Only video files are allowed for field "${fieldName}"`), false);
     }
     return cb(null, true);
   }
 
+  // For unknown fields, try to detect by mimetype as fallback
+  // This helps with mobile apps that might use unexpected field names
+  if (file.mimetype.startsWith('image/')) {
+    console.log(`⚠️  Unknown image field "${fieldName}" - accepting based on mimetype`);
+    return cb(null, true);
+  }
+  
+  if (file.mimetype.startsWith('video/')) {
+    console.log(`⚠️  Unknown video field "${fieldName}" - accepting based on mimetype`);
+    return cb(null, true);
+  }
+
   // Default: reject unknown field types
-  return cb(new Error('Invalid file field'), false);
+  return cb(new Error(`Invalid file field "${fieldName}". Expected image or video field.`), false);
 };
 
 const upload = multer({
@@ -95,13 +139,8 @@ const collectFilesFromFields = (files, fieldNames) => {
 };
 
 // Middleware for listing uploads: max 3 images, 1 video
-const uploadListingMedia = upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'images', maxCount: 3 },
-  { name: 'images[]', maxCount: 3 },
-  { name: 'video', maxCount: 1 },
-  { name: 'videos', maxCount: 1 },
-]);
+// Accept various field name patterns for mobile app compatibility
+const uploadListingMedia = upload.any(); // Use .any() to accept any field name, then filter in fileFilter
 
 // Wrapper to handle multer errors properly
 const uploadListingMediaWithErrorHandling = (req, res, next) => {
@@ -135,11 +174,44 @@ const uploadListingMediaWithErrorHandling = (req, res, next) => {
     // Log after multer processing
     console.log('✅ Multer processing successful');
     console.log('📋 Form fields (after multer):', Object.keys(req.body || {}));
-    if (req.files) {
-      console.log('📁 File fields:', Object.keys(req.files));
-      Object.keys(req.files).forEach(field => {
-        console.log(`  - ${field}: ${req.files[field].length} file(s)`);
+    if (req.files && req.files.length > 0) {
+      console.log(`📁 Total files uploaded: ${req.files.length}`);
+      
+      // Separate images and videos
+      const imageFiles = req.files.filter(file => file.mimetype.startsWith('image/'));
+      const videoFiles = req.files.filter(file => file.mimetype.startsWith('video/'));
+      
+      // Validate limits: max 3 images, max 1 video
+      if (imageFiles.length > 3) {
+        return res.status(400).json({
+          success: false,
+          message: `Too many images. Maximum 3 images allowed, but ${imageFiles.length} were provided.`,
+        });
+      }
+      
+      if (videoFiles.length > 1) {
+        return res.status(400).json({
+          success: false,
+          message: `Too many videos. Maximum 1 video allowed, but ${videoFiles.length} were provided.`,
+        });
+      }
+      
+      req.files.forEach((file, index) => {
+        console.log(`  - File ${index + 1}: field="${file.fieldname}", name="${file.originalname}", type="${file.mimetype}"`);
       });
+      
+      // Organize files by field name for easier access in controllers
+      const filesByField = {};
+      req.files.forEach(file => {
+        const fieldName = file.fieldname;
+        if (!filesByField[fieldName]) {
+          filesByField[fieldName] = [];
+        }
+        filesByField[fieldName].push(file);
+      });
+      req.filesByField = filesByField;
+      
+      console.log(`📊 Summary: ${imageFiles.length} image(s), ${videoFiles.length} video(s)`);
     } else {
       console.log('📁 No files uploaded');
     }
