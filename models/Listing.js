@@ -33,6 +33,12 @@ const listingSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Category enum from mobile app (e.g. 'FARM_PRODUCE', 'BUFFALO', etc.)
+    category: {
+      type: String,
+      required: [true, 'Category is required'],
+      trim: true,
+    },
     title: {
       type: String,
       required: [true, 'Title is required'],

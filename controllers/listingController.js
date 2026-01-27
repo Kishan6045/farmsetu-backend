@@ -1,6 +1,59 @@
 const path = require('path');
 const Listing = require('../models/Listing');
 
+// Allowed category enums from mobile app
+const ALLOWED_CATEGORIES = [
+  // Row 1
+  'FARM_PRODUCE',
+  'BUFFALO',
+  'COW',
+  // Row 2
+  'HORSE',
+  'DOGS',
+  'BULL_OX',
+  'CAMEL',
+  // Row 3
+  'THRESHER',
+  'ROTAVATOR',
+  'SEED_DRILL',
+  'FARM_TOOLS',
+  // Row 4
+  'DRIP_SPRINKLER',
+  'TRACTOR',
+  'MINI_TRACTOR',
+  'TROLLEY',
+  // Row 5
+  'BULLOCK_CART',
+  'POWER_TILLER',
+  'TWO_WHEELER',
+  'FOUR_WHEELER',
+  // Row 6
+  'SHEEP_GOAT',
+  'POULTRY',
+  'SEEDS_MEDICINE',
+  'AUTO_RICKSHAW',
+  // Row 7
+  'CHAFF_CUTTER',
+  'OTHER_VEHICLE',
+  'ORGANIC_FARMING',
+  'NURSERY_PLANTS',
+  // Row 8
+  'SCRAP',
+  'MOBILE',
+  'JOB',
+  'AGRICULTURAL_LAND',
+  // Row 9
+  'VEGETABLES_FRUITS',
+  'CATERING',
+  'FARM_TOOLS_RENT',
+  'HOUSE_SHOP_PLOT',
+  // Row 10
+  'JCB_POCLAIN',
+  'SCHOOL_COLLEGE',
+  'AC_ELECTRIC',
+  'OTHER',
+];
+
 // Create a new listing
 const createListing = async (req, res) => {
   try {
@@ -9,6 +62,7 @@ const createListing = async (req, res) => {
       title,
       description,
       expectedPrice,
+      category,
       village,
       taluko,
       district,
@@ -120,11 +174,27 @@ const createListing = async (req, res) => {
       typeof video === 'string' ? (video.trim() ? video.trim() : null) : video || null;
     const resolvedVideo = videoFromFiles || videoFromBody;
 
+    // Normalize and validate category
+    const normalizedCategory =
+      typeof category === 'string' ? category.trim().toUpperCase() : '';
+
     // Basic validation for required fields
-    if (!title || !description || !expectedPrice) {
+    if (!title || !description || !expectedPrice || !normalizedCategory) {
       return res.status(400).json({
         success: false,
-        message: 'Title, description, and expectedPrice are required.',
+        message: 'Title, description, expectedPrice, and category are required.',
+      });
+    }
+
+    // Validate category is one of allowed enums
+    if (!ALLOWED_CATEGORIES.includes(normalizedCategory)) {
+      console.warn('❌ Invalid category received:', {
+        rawCategory: category,
+        normalizedCategory,
+      });
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid category. Please select a valid category.',
       });
     }
 
@@ -174,6 +244,7 @@ const createListing = async (req, res) => {
 
     const listing = await Listing.create({
       user: req.user._id,
+      category: normalizedCategory,
       title,
       description,
       expectedPrice: numericPrice,

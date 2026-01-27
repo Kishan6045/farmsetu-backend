@@ -5,6 +5,7 @@ const path = require('path');
 const connectDB = require('./config/database');
 const logger = require('./middleware/logger');
 
+const locationRoutes = require('./routes/locationRoutes');
 // Load environment variables
 dotenv.config();
 
@@ -53,6 +54,7 @@ app.use(logger);
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/listings', require('./routes/listingRoutes'));
 app.use('/api/upload', require('./routes/uploadRoutes'));
+app.use('/api/locations', require('./routes/locationRoutes'));
 
 // Health check route
 app.get('/health', (req, res) => {
