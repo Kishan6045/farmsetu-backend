@@ -1,12 +1,20 @@
 const express = require("express");
 const router = express.Router();
-const locationController = require("../controllers/locationController");
+const controller = require("../controllers/locationController");
 
-// cascading APIs (FINAL)
-router.get("/states", locationController.getStates);
-router.get("/districts/:state", locationController.getDistricts);
-router.get("/talukos/:state/:district", locationController.getTalukos);
-router.get("/villages/:state/:district/:taluko", locationController.getVillages);
-router.get("/pincode/:pincode", locationController.getByPincode);
+router.get("/states", controller.getStates);
+router.get("/districts/:state", controller.getDistricts);
+router.get("/talukos/:state/:district", controller.getTalukos);
+
+// taluk / SO / HO wise villages
+router.get("/villages/:state/:district/:taluko", controller.getVillages);
+
+// 🔥 FULL district villages (Ingorala, Thesiya, sab)
+router.get(
+  "/villages-all/:state/:district",
+  controller.getAllVillagesOfDistrict
+);
+
+router.get("/pincode/:pincode", controller.getByPincode);
 
 module.exports = router;
